@@ -1,0 +1,14 @@
+Manifest-Version: 1.0
+Bnd-LastModified: 1496152886698
+Build-Jdk: 1.8.0_121
+Built-By: nantunes
+Bundle-ManifestVersion: 2
+Bundle-Name: sample-2
+Bundle-SymbolicName: sample-2
+Bundle-Version: 1.0.0.SNAPSHOT
+Created-By: Apache Maven Bundle Plugin
+Provide-Capability: org.pentaho.webpackage;name=my-stuff;version:Version
+ ="1.3";root="/my-stuff_1.3"
+Require-Capability: org.pentaho.webpackage;filter:="(&(name=my-module)(v
+ ersion>=1.0))"
+Tool: Bnd-2.3.0.201405100607

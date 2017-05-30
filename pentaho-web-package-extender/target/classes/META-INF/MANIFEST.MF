@@ -1,0 +1,17 @@
+Manifest-Version: 1.0
+Bnd-LastModified: 1496152885504
+Build-Jdk: 1.8.0_121
+Built-By: nantunes
+Bundle-Activator: org.pentaho.webpackage.internal.osgi.Activator
+Bundle-ManifestVersion: 2
+Bundle-Name: pentaho-web-package-extender
+Bundle-SymbolicName: pentaho-web-package-extender
+Bundle-Version: 1.0.0.SNAPSHOT
+Created-By: Apache Maven Bundle Plugin
+Export-Package: org.pentaho.webpackage;version="1.0.0.SNAPSHOT"
+Import-Package: org.ops4j.pax.web.extender.whiteboard;version="[3.1,4)",
+ org.ops4j.pax.web.extender.whiteboard.runtime;version="[3.1,4)",org.osg
+ i.framework;version="[1.7,2)",org.osgi.framework.wiring;version="[1.1,2
+ )",org.pentaho.webpackage
+Require-Capability: osgi.ee;filter:="(&(osgi.ee=JavaSE)(version=1.8))"
+Tool: Bnd-2.3.0.201405100607

@@ -1,0 +1,8 @@
+org/pentaho/webpackage/internal/PentahoWebPackageServiceImpl.class
+org/pentaho/webpackage/internal/PentahoWebPackageBundleImpl.class
+org/pentaho/webpackage/PentahoWebPackageService.class
+org/pentaho/webpackage/PentahoWebPackage.class
+org/pentaho/webpackage/internal/PentahoWebPackageImpl.class
+org/pentaho/webpackage/PentahoWebPackageBundle.class
+org/pentaho/webpackage/internal/PentahoWebPackageBundleAbstract.class
+org/pentaho/webpackage/internal/osgi/Activator.class
