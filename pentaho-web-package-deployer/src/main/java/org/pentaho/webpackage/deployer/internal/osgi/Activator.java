@@ -1,18 +1,19 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * This program is free software; you can redistribute it and/or modify it under the
+ * terms of the GNU Lesser General Public License, version 2.1 as published by the Free Software
+ * Foundation.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * You should have received a copy of the GNU Lesser General Public License along with this
+ * program; if not, you can obtain a copy at http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+ * or from the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU Lesser General Public License for more details.
+ *
+ *
+ * Copyright 2002 - 2017 Pentaho Corporation. All rights reserved.
  */
 package org.pentaho.webpackage.deployer.internal.osgi;
 
@@ -36,28 +37,28 @@ public class Activator implements BundleActivator {
   private ServiceRegistration<URLStreamHandlerService> urlHandlerRegistration;
 
   public void start( BundleContext bundleContext ) {
-    urlTransformer = new UrlTransformer();
-    urlTransformerRegistration = bundleContext.registerService( ArtifactUrlTransformer.class, urlTransformer, null );
+    this.urlTransformer = new UrlTransformer();
+    this.urlTransformerRegistration = bundleContext.registerService( ArtifactUrlTransformer.class, this.urlTransformer, null );
 
-    urlHandler = new UrlHandler();
+    this.urlHandler = new UrlHandler();
 
     Dictionary<String, String> props = new Hashtable<>();
-    props.put( URLConstants.URL_HANDLER_PROTOCOL, "pentaho-webpackage" );
+    props.put( URLConstants.URL_HANDLER_PROTOCOL, "pentaho-web-package" );
 
-    urlHandlerRegistration = bundleContext.registerService( URLStreamHandlerService.class, urlHandler, props );
+    this.urlHandlerRegistration = bundleContext.registerService( URLStreamHandlerService.class, this.urlHandler, props );
   }
 
   public void stop( BundleContext bundleContext ) {
-    if ( urlTransformerRegistration != null ) {
-      urlTransformerRegistration.unregister();
-      urlTransformerRegistration = null;
-      urlTransformer = null;
+    if ( this.urlTransformerRegistration != null ) {
+      this.urlTransformerRegistration.unregister();
+      this.urlTransformerRegistration = null;
+      this.urlTransformer = null;
     }
 
-    if ( urlHandlerRegistration != null ) {
-      urlHandlerRegistration.unregister();
-      urlHandlerRegistration = null;
-      urlHandler = null;
+    if ( this.urlHandlerRegistration != null ) {
+      this.urlHandlerRegistration.unregister();
+      this.urlHandlerRegistration = null;
+      this.urlHandler = null;
     }
   }
 }

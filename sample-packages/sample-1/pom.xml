@@ -25,11 +25,11 @@
               org.pentaho.webpackage;
                 name="my-module";
                 version:Version=1.2;
-                root=/my-module_1.2,
+                root=/my-module,
               org.pentaho.webpackage;
                 name="my-other-module";
                 version:Version=2.0;
-                root=/my-module_1.2/sub
+                root=/my-module/sub
             </Provide-Capability>
           </instructions>
         </configuration>

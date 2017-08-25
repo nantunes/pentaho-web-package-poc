@@ -1,56 +1,72 @@
-/*!
- * Copyright 2010 - 2017 Pentaho Corporation. All rights reserved.
+/*
+ * This program is free software; you can redistribute it and/or modify it under the
+ * terms of the GNU Lesser General Public License, version 2.1 as published by the Free Software
+ * Foundation.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You should have received a copy of the GNU Lesser General Public License along with this
+ * program; if not, you can obtain a copy at http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+ * or from the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU Lesser General Public License for more details.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ *
+ * Copyright 2002 - 2017 Pentaho Corporation. All rights reserved.
  */
 
 package org.pentaho.webpackage.internal;
 
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 import org.osgi.framework.Bundle;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.Constants;
-import org.osgi.framework.Version;
 import org.osgi.framework.wiring.BundleCapability;
 import org.osgi.framework.wiring.BundleWiring;
 import org.pentaho.webpackage.PentahoWebPackage;
+import org.pentaho.webpackage.PentahoWebPackageBundle;
 import org.pentaho.webpackage.PentahoWebPackageService;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URL;
+import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class PentahoWebPackageBundleImpl extends PentahoWebPackageBundleAbstract {
+public class PentahoWebPackageBundleImpl implements PentahoWebPackageBundle {
+  private static final JSONParser parser = new JSONParser();
+
   private final Bundle bundle;
-  private final BundleContext bundleContext;
+
+  private ArrayList<PentahoWebPackage> pentahoWebPackages;
 
   PentahoWebPackageBundleImpl( Bundle bundle ) {
     this.bundle = bundle;
-    this.bundleContext = bundle.getBundleContext();
 
-    // get the bundle name
-    String name = this.bundle.getHeaders().get( Constants.BUNDLE_NAME );
-    // if there is no name, then default to symbolic name
-    name = ( name == null ) ? this.bundle.getSymbolicName() : name;
-    // if there is no symbolic name, resort to location
-    name = ( name == null ) ? this.bundle.getLocation() : name;
-    // get the bundle version
-    String version = this.bundle.getHeaders().get( Constants.BUNDLE_VERSION );
-    name = ( ( version != null ) ) ? name + " (" + version + ")" : name;
+    this.pentahoWebPackages = new ArrayList<>();
+  }
 
-    long bundleId = this.bundle.getBundleId();
+  private static Map<String, Object> parsePackageJson( URL resourceUrl ) throws IOException, ParseException {
+    URLConnection urlConnection = resourceUrl.openConnection();
+    InputStream inputStream = urlConnection.getInputStream();
 
-    this.setBundleId( bundleId );
-    this.setName( name );
+    InputStreamReader inputStreamReader = null;
+    BufferedReader bufferedReader = null;
+
+    try {
+      inputStreamReader = new InputStreamReader( inputStream );
+      bufferedReader = new BufferedReader( inputStreamReader );
+
+      return (Map<String, Object>) parser.parse( bufferedReader );
+    } catch ( Exception ignored ) {
+      // ignored
+    }
+
+    return null;
   }
 
   @Override
@@ -58,22 +74,45 @@ public class PentahoWebPackageBundleImpl extends PentahoWebPackageBundleAbstract
     BundleWiring wiring = this.bundle.adapt( BundleWiring.class );
 
     if ( wiring != null ) {
-      ArrayList<PentahoWebPackage> pentahoWebPackages = new ArrayList<>();
-
       List<BundleCapability> capabilities = wiring.getCapabilities( PentahoWebPackageService.CAPABILITY_NAMESPACE );
       capabilities.forEach( bundleCapability -> {
         Map<String, Object> attributes = bundleCapability.getAttributes();
 
-        String name = (String) attributes.get( "name" );
-        Version version = (Version) attributes.get( "version" );
-        String root = (String) attributes.get( "root" );
+        // for now using only the package.json information - so only the `root` attribute is mandatory
+//        String name = (String) attributes.get( "name" );
+//        Version version = (Version) attributes.get( "version" );
+        String root = (String) attributes.getOrDefault( "root", "" );
 
-        if ( name != null && version != null ) {
-          pentahoWebPackages.add( new PentahoWebPackageImpl( bundle, name, version, root ) );
+        try {
+          URL capabilityPackageJsonUrl = this.bundle.getResource( root + "/package.json" );
+          if ( capabilityPackageJsonUrl != null ) {
+            Map<String, Object> packageJson = parsePackageJson( capabilityPackageJsonUrl );
+
+            String name = (String) packageJson.get( "name" );
+            String version = (String) packageJson.get( "version" );
+
+            if ( name != null && version != null ) {
+              this.pentahoWebPackages.add( new PentahoWebPackageImpl( this.bundle, name, version, root ) );
+            }
+          }
+        } catch ( RuntimeException | ParseException | IOException ignored ) {
+          // throwing will make everything fail
+          // what damage control should we do?
+          // **don't register this capability?** <-- this is what we're doing now
+          // ignore and use only the capability info?
+          // don't register all the bundle's capabilities?
+          // this is all post-bundle wiring phase, so only the requirejs configuration is affected
+          // the bundle is started and nothing will change that... or should we bundle.stop()?
         }
       } );
 
-      pentahoWebPackages.forEach( PentahoWebPackage::init );
+      this.pentahoWebPackages.forEach( PentahoWebPackage::init );
     }
   }
+
+  @Override
+  public void destroy() {
+    this.pentahoWebPackages.forEach( PentahoWebPackage::destroy );
+  }
+
 }

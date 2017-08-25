@@ -16,15 +16,30 @@
  * Copyright 2002 - 2017 Pentaho Corporation. All rights reserved.
  */
 
-package org.pentaho.webpackage;
+package org.pentaho.webpackage.internal;
 
-public interface PentahoWebPackage {
-  String getName();
-  String getVersion();
+import org.pentaho.webpackage.PentahoWebPackage;
 
-  String getResourceRootPath();
+public abstract class PentahoWebPackageAbstract implements PentahoWebPackage {
+  private final String name;
+  private final String version;
+  private final String resourceRootPath;
 
-  void init();
+  PentahoWebPackageAbstract( String name, String version, String resourceRootPath ) {
+    this.name = name;
+    this.version = version;
+    this.resourceRootPath = resourceRootPath;
+  }
 
-  void destroy();
+  public String getName() {
+    return this.name;
+  }
+
+  public String getVersion() {
+    return this.version;
+  }
+
+  public String getResourceRootPath() {
+    return this.resourceRootPath;
+  }
 }

@@ -25,7 +25,7 @@
               org.pentaho.webpackage;
                 name="my-stuff";
                 version:Version=1.3;
-                root=/my-stuff_1.3
+                root=/my-stuff
             </Provide-Capability>
             <Require-Capability>
               org.pentaho.webpackage;

@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>net.nantunes</groupId>
-  <artifactId>deployer-umbrella</artifactId>
+  <artifactId>pentaho-web-package-umbrella</artifactId>
   <version>1.0-SNAPSHOT</version>
 
   <packaging>pom</packaging>
@@ -136,8 +136,8 @@
 
   <modules>
     <module>pentaho-web-package-extender</module>
-    <module>sample-packages</module>
-    <module>pentaho-requirejs-manager</module>
     <module>pentaho-web-package-deployer</module>
+    <module>pentaho-web-package-assembly</module>
+    <module>sample-packages</module>
   </modules>
 </project>

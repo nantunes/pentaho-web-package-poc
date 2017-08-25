@@ -1,4 +1,6 @@
 {
+  "name": "my-module",
+  "version": "1.2",
   "config": {
     "pentaho/service": {
       "my-module_is": "another_thing"

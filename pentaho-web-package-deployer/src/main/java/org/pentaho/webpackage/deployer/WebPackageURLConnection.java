@@ -12,7 +12,8 @@
  * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See the GNU Lesser General Public License for more details.
  *
- * Copyright 2017 Pentaho Corporation. All rights reserved.
+ *
+ * Copyright 2002 - 2017 Pentaho Corporation. All rights reserved.
  */
 
 package org.pentaho.webpackage.deployer;
@@ -33,6 +34,7 @@ import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -45,10 +47,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -69,8 +70,11 @@ public class WebPackageURLConnection extends java.net.URLConnection {
     thread.setName( "WebjarsURLConnection pool" );
     return thread;
   } );
+
   private static final JSONParser parser = new JSONParser();
+
   private final Logger logger = LoggerFactory.getLogger( getClass() );
+
   Future<Void> transform_thread;
 
   public WebPackageURLConnection( URL url ) {
@@ -88,15 +92,15 @@ public class WebPackageURLConnection extends java.net.URLConnection {
       PipedInputStream pipedInputStream = new PipedInputStream( pipedOutputStream );
 
       // making this here allows to fail with invalid URLs
-      final java.net.URLConnection urlConnection = url.openConnection();
+      final java.net.URLConnection urlConnection = this.url.openConnection();
       urlConnection.connect();
       final InputStream originalInputStream = urlConnection.getInputStream();
 
-      transform_thread = EXECUTOR.submit( new WebPackageTransformer( url, originalInputStream, pipedOutputStream ) );
+      this.transform_thread = EXECUTOR.submit( new WebPackageTransformer( this.url, originalInputStream, pipedOutputStream ) );
 
       return pipedInputStream;
     } catch ( Exception e ) {
-      logger.error( getURL().toString() + ": Error opening url" );
+      this.logger.error( getURL().toString() + ": Error opening url" );
 
       throw new IOException( "Error opening url", e );
     }
@@ -106,7 +110,6 @@ public class WebPackageURLConnection extends java.net.URLConnection {
     private static final String DEBUG_MESSAGE_FAILED_WRITING =
         "Problem transferring Jar content, probably JarOutputStream was already closed.";
 
-    private static final String MANIFEST_MF = "MANIFEST.MF";
     private static final String PACKAGE_JSON = "package.json";
 
     private static final int BYTES_BUFFER_SIZE = 4096;
@@ -123,11 +126,12 @@ public class WebPackageURLConnection extends java.net.URLConnection {
     /* artifact information */
     private JarOutputStream jarOutputStream;
 
-
     /* resource paths */
-    private Path absoluteResourcesPath;
-
     private Path absoluteTempPath;
+
+    // those are needed until PAXWEB-1099 is in platform, to avoid the "same servlet name" issue
+    private String resourcesFolderName;
+    private Path absoluteTempResourcesPath;
 
     //endregion
 
@@ -143,7 +147,7 @@ public class WebPackageURLConnection extends java.net.URLConnection {
       try {
         this.transform();
       } catch ( Exception e ) {
-        logger.error( this.url.toString() + ": Error Transforming zip", e );
+        this.logger.error( this.url.toString() + ": Error Transforming package", e );
 
         this.outputStream.close();
 
@@ -154,103 +158,17 @@ public class WebPackageURLConnection extends java.net.URLConnection {
     }
 
     private void transform() throws IOException {
-      String webjarUrl = "";
-
       init();
 
-      Manifest manifest;
-      if ( this.url.getProtocol().equals( "jardir" ) || this.url.getProtocol().equals( "file" ) && this.url.getPath().endsWith( ".zip" ) ) {
-        manifest = readFromZip();
-      } else {
-        manifest = readFromTgz();
-      }
-
-      this.jarOutputStream = new JarOutputStream( outputStream, manifest );
-
-      Collection<File> scrFiles = FileUtils.listFiles(
-          absoluteTempPath.toFile(),
-          TrueFileFilter.INSTANCE,
-          TrueFileFilter.INSTANCE
-      );
-
-      for ( File srcFile : scrFiles ) {
-        final String relSrcFilePath = FilenameUtils.separatorsToUnix( absoluteTempPath.relativize( srcFile.toPath() ).toString() );
-
-        copyFileToZip( jarOutputStream, relSrcFilePath, srcFile );
-      }
-
       try {
-        jarOutputStream.closeEntry();
-
-        outputStream.flush();
-
-        jarOutputStream.close();
-      } catch ( IOException ioexception ) {
-        logger.debug( webjarUrl + ": " + DEBUG_MESSAGE_FAILED_WRITING, ioexception );
-      }
-
-      try {
-        FileUtils.deleteDirectory( absoluteTempPath.toFile() );
-      } catch ( IOException ignored ) {
-        // ignored
-      }
-    }
-
-    private Manifest readFromZip() {
-      Manifest manifest = getManifest( this.url.getPath().replace( "/", "_" ), "0.0.0" );
-
-      ZipInputStream zipInputStream = new ZipInputStream( inputStream );
-
-      try {
-        ZipEntry entry;
-
+        Manifest manifest = createManifest();
         List<String> capabilities = new ArrayList<>();
-        List<String> requirements = new ArrayList<>();
+        List<String> requirements = null; // new ArrayList<>();
 
-        while ( ( entry = zipInputStream.getNextEntry() ) != null ) {
-          String name = entry.getName();
-
-          if ( !entry.isDirectory() ) {
-            File temporarySourceFile = null;
-            BufferedOutputStream temporarySourceFileOutputStream = null;
-
-            temporarySourceFile = new File( absoluteTempPath.toAbsolutePath() + File.separator + FilenameUtils.separatorsToSystem( name ) );
-            temporarySourceFile.getParentFile().mkdirs();
-
-            temporarySourceFileOutputStream = new BufferedOutputStream( new FileOutputStream( temporarySourceFile ) );
-
-            byte[] bytes = new byte[BYTES_BUFFER_SIZE];
-            int read;
-            while ( ( read = zipInputStream.read( bytes ) ) != -1 ) {
-              temporarySourceFileOutputStream.write( bytes, 0, read );
-            }
-
-            temporarySourceFileOutputStream.close();
-
-            if ( name.endsWith( PACKAGE_JSON ) ) {
-              Map<String, Object> packageJson = parseJsonPackage( new FileInputStream( temporarySourceFile ) );
-
-              String moduleName = (String) packageJson.get( "name" );
-              String moduleVersion = VersionParser.parseVersion( (String) packageJson.get( "version" ) ).toString();
-              String root = name.replace( PACKAGE_JSON, "" );
-              if ( root.endsWith( "/" ) ) {
-                root = root.substring( 0, root.length() - 1 );
-              }
-
-              capabilities.add( "org.pentaho.webpackage;name=\"" + moduleName + "\";version:Version=\"" + moduleVersion + "\";root=\"/" + root + "\"" );
-
-              if ( packageJson.containsKey( "dependencies" ) ) {
-                HashMap<String, ?> deps = (HashMap<String, ?>) packageJson.get( "dependencies" );
-
-                final Set<String> depsKeySet = deps.keySet();
-                for ( String key : depsKeySet ) {
-                  requirements.add( "org.pentaho.webpackage;filter:=\"(&(name=" + key + ")(version>=" + (String) deps.get( key ) + "))\"" );
-                }
-              }
-            }
-          }
-
-          zipInputStream.closeEntry();
+        if ( this.url.getProtocol().equals( "jardir" ) || this.url.getProtocol().equals( "file" ) && this.url.getPath().endsWith( ".zip" ) ) {
+          processZipArchive( manifest, capabilities, requirements );
+        } else {
+          processTgzArchive( manifest, capabilities, requirements );
         }
 
         if ( !capabilities.isEmpty() ) {
@@ -258,104 +176,140 @@ public class WebPackageURLConnection extends java.net.URLConnection {
               .put( new Attributes.Name( Constants.PROVIDE_CAPABILITY ), String.join( ", ", capabilities ) );
         }
 
-        if ( !requirements.isEmpty() ) {
-          manifest.getMainAttributes()
-              .put( new Attributes.Name( Constants.REQUIRE_CAPABILITY ), String.join( ", ", requirements ) );
+//        if ( !requirements.isEmpty() ) {
+//          manifest.getMainAttributes()
+//              .put( new Attributes.Name( Constants.REQUIRE_CAPABILITY ), String.join( ", ", requirements ) );
+//        }
+
+        this.jarOutputStream = new JarOutputStream( this.outputStream, manifest );
+
+        Collection<File> scrFiles = FileUtils.listFiles(
+            this.absoluteTempPath.toFile(),
+            TrueFileFilter.INSTANCE,
+            TrueFileFilter.INSTANCE
+        );
+
+        for ( File srcFile : scrFiles ) {
+          final String relSrcFilePath = FilenameUtils.separatorsToUnix( this.absoluteTempPath.relativize( srcFile.toPath() ).toString() );
+
+          copyFileToZip( this.jarOutputStream, relSrcFilePath, srcFile );
+        }
+
+        try {
+          this.jarOutputStream.closeEntry();
+
+          this.outputStream.flush();
+
+          this.jarOutputStream.close();
+        } catch ( IOException ioexception ) {
+          this.logger.debug( DEBUG_MESSAGE_FAILED_WRITING, ioexception );
         }
       } catch ( IOException e ) {
-        logger.debug( ": Pipe is closed, no need to continue." );
+        this.logger.debug( ": Pipe is closed, no need to continue." );
       } finally {
         try {
-          zipInputStream.close();
-        } catch ( IOException ioexception ) {
-          logger.debug( ": Tried to close JarInputStream, but it was already closed.", ioexception );
+          FileUtils.deleteDirectory( this.absoluteTempPath.toFile() );
+        } catch ( IOException ignored ) {
+          // ignored
         }
       }
-
-      return manifest;
     }
 
-    private Manifest readFromTgz() {
-      Manifest manifest = getManifest( this.url.getPath().replace( "/", "_" ), "0.0.0" );
+    private void processZipArchive( Manifest manifest, List<String> capabilities, List<String> requirements ) throws IOException {
+      ZipInputStream zipInputStream = null;
 
+      try {
+        zipInputStream = new ZipInputStream( this.inputStream );
+
+        ZipEntry entry;
+        while ( ( entry = zipInputStream.getNextEntry() ) != null ) {
+          String name = entry.getName();
+
+          if ( !entry.isDirectory() ) {
+            processArchiveEntry( zipInputStream, name, capabilities, requirements );
+          }
+
+          zipInputStream.closeEntry();
+        }
+      } finally {
+        try {
+          if ( zipInputStream != null ) {
+            zipInputStream.close();
+          }
+        } catch ( IOException ioexception ) {
+          this.logger.debug( ": Tried to close JarInputStream, but it was already closed.", ioexception );
+        }
+      }
+    }
+
+    private void processTgzArchive( Manifest manifest, List<String> capabilities, List<String> requirements ) throws IOException {
       TarArchiveInputStream tarGzInputStream = null;
 
       try {
-        tarGzInputStream = new TarArchiveInputStream( new GzipCompressorInputStream( inputStream ) );
-
-        List<String> capabilities = new ArrayList<>();
-        List<String> requirements = new ArrayList<>();
+        tarGzInputStream = new TarArchiveInputStream( new GzipCompressorInputStream( this.inputStream ) );
 
         TarArchiveEntry entry;
         while ( ( entry = tarGzInputStream.getNextTarEntry() ) != null ) {
           String name = entry.getName();
 
           if ( !entry.isDirectory() ) {
-            File temporarySourceFile = null;
-            BufferedOutputStream temporarySourceFileOutputStream = null;
-
-            temporarySourceFile = new File( absoluteTempPath.toAbsolutePath() + File.separator + FilenameUtils.separatorsToSystem( name ) );
-            temporarySourceFile.getParentFile().mkdirs();
-
-            temporarySourceFileOutputStream = new BufferedOutputStream( new FileOutputStream( temporarySourceFile ) );
-
-            byte[] bytes = new byte[BYTES_BUFFER_SIZE];
-            int read;
-            while ( ( read = tarGzInputStream.read( bytes ) ) != -1 ) {
-              temporarySourceFileOutputStream.write( bytes, 0, read );
-            }
-
-            temporarySourceFileOutputStream.close();
-
-            if ( name.endsWith( PACKAGE_JSON ) ) {
-              Map<String, Object> packageJson = parseJsonPackage( new FileInputStream( temporarySourceFile ) );
-
-              String moduleName = (String) packageJson.get( "name" );
-              String moduleVersion = VersionParser.parseVersion( (String) packageJson.get( "version" ) ).toString();
-              String root = name.replace( PACKAGE_JSON, "" );
-              if ( root.endsWith( "/" ) ) {
-                root = root.substring( 0, root.length() - 1 );
-              }
-
-              capabilities.add( "org.pentaho.webpackage;name=\"" + moduleName + "\";version:Version=\"" + moduleVersion + "\";root=\"/" + root + "\"" );
-
-              if ( packageJson.containsKey( "dependencies" ) ) {
-                HashMap<String, ?> deps = (HashMap<String, ?>) packageJson.get( "dependencies" );
-
-                final Set<String> depsKeySet = deps.keySet();
-                for ( String key : depsKeySet ) {
-                  requirements.add( "org.pentaho.webpackage;filter:=\"(&(name=" + key + ")(version>=" + (String) deps.get( key ) + "))\"" );
-                }
-              }
-            }
+            processArchiveEntry( tarGzInputStream, name, capabilities, requirements );
           }
         }
-
-        if ( !capabilities.isEmpty() ) {
-          manifest.getMainAttributes()
-              .put( new Attributes.Name( Constants.PROVIDE_CAPABILITY ), String.join( ", ", capabilities ) );
-        }
-
-        if ( !requirements.isEmpty() ) {
-          manifest.getMainAttributes()
-              .put( new Attributes.Name( Constants.REQUIRE_CAPABILITY ), String.join( ", ", requirements ) );
-        }
-      } catch ( IOException e ) {
-        logger.debug( ": Pipe is closed, no need to continue." );
       } finally {
         try {
           if ( tarGzInputStream != null ) {
             tarGzInputStream.close();
           }
         } catch ( IOException ioexception ) {
-          logger.debug( ": Tried to close JarInputStream, but it was already closed.", ioexception );
+          this.logger.debug( ": Tried to close JarInputStream, but it was already closed.", ioexception );
         }
       }
-
-      return manifest;
     }
 
-    public Map<String, Object> parseJsonPackage( InputStream inputStream ) {
+    private void processArchiveEntry( InputStream inputStream, String name, List<String> capabilities, List<String> requirements ) throws IOException {
+      File temporarySourceFile = new File( this.absoluteTempResourcesPath.toAbsolutePath() + File.separator + FilenameUtils.separatorsToSystem( name ) );
+      temporarySourceFile.getParentFile().mkdirs();
+
+      BufferedOutputStream temporarySourceFileOutputStream = new BufferedOutputStream( new FileOutputStream( temporarySourceFile ) );
+
+      byte[] bytes = new byte[BYTES_BUFFER_SIZE];
+      int read;
+      while ( ( read = inputStream.read( bytes ) ) != -1 ) {
+        temporarySourceFileOutputStream.write( bytes, 0, read );
+      }
+
+      temporarySourceFileOutputStream.close();
+
+      if ( name.endsWith( PACKAGE_JSON ) ) {
+        processPackageJson( temporarySourceFile, name, capabilities, requirements );
+      }
+    }
+
+    private void processPackageJson( File temporarySourceFile, String name, List<String> capabilities, List<String> requirements ) throws FileNotFoundException {
+      Map<String, Object> packageJson = parsePackageJson( new FileInputStream( temporarySourceFile ) );
+
+      String moduleName = (String) packageJson.get( "name" );
+      String moduleVersion = VersionParser.parseVersion( (String) packageJson.get( "version" ) ).toString();
+      String root = name.replace( PACKAGE_JSON, "" );
+      if ( root.endsWith( "/" ) ) {
+        root = root.substring( 0, root.length() - 1 );
+      }
+
+      capabilities.add( "org.pentaho.webpackage;name=\"" + moduleName + "\";version:Version=\"" + moduleVersion + "\";root=\"/" + this.resourcesFolderName + "/" + root + "\"" );
+
+      // we can't use required capabilities until all the platform is using capability based web packages
+//      if ( packageJson.containsKey( "dependencies" ) ) {
+//        HashMap<String, ?> deps = (HashMap<String, ?>) packageJson.get( "dependencies" );
+//
+//        final Set<String> depsKeySet = deps.keySet();
+//        for ( String key : depsKeySet ) {
+//          requirements.add( "org.pentaho.webpackage;filter:=\"(&(name=" + key + ")(version>=" + (String) deps.get( key ) + "))\"" );
+//        }
+//      }
+    }
+
+    public Map<String, Object> parsePackageJson( InputStream inputStream ) {
       try {
         InputStreamReader inputStreamReader = new InputStreamReader( inputStream );
         BufferedReader bufferedReader = new BufferedReader( inputStreamReader );
@@ -367,12 +321,30 @@ public class WebPackageURLConnection extends java.net.URLConnection {
     }
 
     private void init() throws IOException {
-      this.absoluteResourcesPath = null;
-
       this.absoluteTempPath = Files.createTempDirectory( "PentahoWebPackageDeployer" );
+
+      // those are needed until PAXWEB-1099 is in platform, to avoid the "same servlet name" issue
+      this.resourcesFolderName = "pwp-" + UUID.randomUUID().toString();
+      this.absoluteTempResourcesPath = Files.createDirectory( this.absoluteTempPath.resolve( this.resourcesFolderName ) );
     }
 
-    private Manifest getManifest( String name, String version ) {
+    private Manifest createManifest() {
+      String name = FilenameUtils.getBaseName( this.url.getPath() );
+      Version version = VersionParser.DEFAULT;
+
+      // not essential, just trying to get a prettier name and version
+      int i = name.lastIndexOf( '-' );
+      if ( i != -1 ) {
+        String possibleVersion = name.substring( i + 1 );
+        if ( Character.isDigit( possibleVersion.charAt( 0 ) ) ) {
+          version = VersionParser.parseVersion( possibleVersion );
+
+          if ( !version.equals( VersionParser.DEFAULT ) ) {
+            name = name.substring( 0, i );
+          }
+        }
+      }
+
       Manifest manifest = new Manifest();
       manifest.getMainAttributes().put( Attributes.Name.MANIFEST_VERSION, "1.0" );
 
@@ -380,9 +352,9 @@ public class WebPackageURLConnection extends java.net.URLConnection {
           .put( new Attributes.Name( Constants.BUNDLE_MANIFESTVERSION ), "2" );
 
       manifest.getMainAttributes()
-          .put( new Attributes.Name( Constants.BUNDLE_SYMBOLICNAME ), "pentaho-webpackage-" + name );
+          .put( new Attributes.Name( Constants.BUNDLE_SYMBOLICNAME ), "pentaho-web-package-" + name );
       manifest.getMainAttributes()
-          .put( new Attributes.Name( Constants.BUNDLE_VERSION ), version );
+          .put( new Attributes.Name( Constants.BUNDLE_VERSION ), version.toString() );
 
       return manifest;
     }
@@ -414,31 +386,21 @@ public class WebPackageURLConnection extends java.net.URLConnection {
       }
     }
 
-    private void addContentToZip( JarOutputStream zip, String entry, String content ) throws IOException {
-      ZipEntry zipEntry = new ZipEntry( entry );
-      zip.putNextEntry( zipEntry );
-      zip.write( content.getBytes( "UTF-8" ) );
-      zip.closeEntry();
-    }
-
     /**
      * Created by nbaker on 11/25/14.
      */
-    public static class VersionParser {
+    static class VersionParser {
       private static Logger logger = LoggerFactory.getLogger( VersionParser.class );
 
       private static Version DEFAULT = new Version( 0, 0, 0 );
       private static Pattern VERSION_PAT = Pattern.compile( "([0-9]+)?(?:\\.([0-9]*)(?:\\.([0-9]*))?)?[\\.-]?(.*)" );
       private static Pattern CLASSIFIER_PAT = Pattern.compile( "[a-zA-Z0-9_\\-]+" );
 
-      private VersionParser() throws InstantiationException {
-        throw new InstantiationException( "Instances of this type are forbidden." );
-      }
-
-      public static Version parseVersion( String incomingVersion ) {
+      static Version parseVersion( String incomingVersion ) {
         if ( incomingVersion == null || incomingVersion.isEmpty() ) {
           return DEFAULT;
         }
+
         Matcher m = VERSION_PAT.matcher( incomingVersion );
         if ( !m.matches() ) {
           return DEFAULT;
@@ -491,7 +453,6 @@ public class WebPackageURLConnection extends java.net.URLConnection {
           } else {
             return new Version( major, minor, patch );
           }
-
         }
       }
     }

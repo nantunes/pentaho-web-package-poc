@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<features name="${project.artifactId}-${project.version}" xmlns="http://karaf.apache.org/xmlns/features/v1.0.0">
+
+  <feature name='${project.artifactId}' description='${project.name}' version='${project.version}'>
+    <details>${project.description}</details>
+
+    <bundle>mvn:commons-io/commons-io/2.4</bundle>
+    <bundle>mvn:commons-lang/commons-lang/2.6</bundle>
+    <bundle>mvn:com.googlecode.json-simple/json-simple/1.1.1</bundle>
+    <bundle>mvn:org.apache.commons/commons-compress/1.14</bundle>
+
+    <bundle>mvn:net.nantunes/pentaho-web-package-extender/1.0-SNAPSHOT</bundle>
+    <bundle>mvn:net.nantunes/pentaho-web-package-deployer/1.0-SNAPSHOT</bundle>
+  </feature>
+
+</features>

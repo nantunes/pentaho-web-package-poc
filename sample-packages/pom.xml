@@ -6,7 +6,7 @@
 
   <parent>
     <groupId>net.nantunes</groupId>
-    <artifactId>deployer-umbrella</artifactId>
+    <artifactId>pentaho-web-package-umbrella</artifactId>
     <version>1.0-SNAPSHOT</version>
   </parent>
 

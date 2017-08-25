@@ -12,7 +12,8 @@
  * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See the GNU Lesser General Public License for more details.
  *
- * Copyright 2014 Pentaho Corporation. All rights reserved.
+ *
+ * Copyright 2002 - 2017 Pentaho Corporation. All rights reserved.
  */
 
 package org.pentaho.webpackage.deployer;
@@ -26,7 +27,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URL;
 import java.util.zip.ZipFile;
@@ -36,6 +36,10 @@ public class UrlTransformer implements ArtifactUrlTransformer {
 
   @Override
   public boolean canHandle( File file ) {
+    if ( !file.exists() ) {
+      return false;
+    }
+
     if ( file.getName().endsWith( ".tgz" ) ) {
       TarArchiveInputStream tarInput = null;
       try {
@@ -55,6 +59,7 @@ public class UrlTransformer implements ArtifactUrlTransformer {
           try {
             tarInput.close();
           } catch ( IOException ignored ) {
+            // Ignore
           }
         }
       }
@@ -68,12 +73,12 @@ public class UrlTransformer implements ArtifactUrlTransformer {
 
         return zipFile.getEntry( "package.json" ) != null && zipFile.getEntry( "META-INF/MANIFEST.MF" ) == null;
       } catch ( IOException e ) {
-        logger.error( e.getMessage(), e );
+        this.logger.error( e.getMessage(), e );
       } finally {
         if ( zipFile != null ) {
           try {
             zipFile.close();
-          } catch ( IOException e ) {
+          } catch ( IOException ignored ) {
             // Ignore
           }
         }
@@ -85,6 +90,6 @@ public class UrlTransformer implements ArtifactUrlTransformer {
 
   @Override
   public URL transform( URL url ) throws Exception {
-    return new URL( "pentaho-webpackage", null, url.toExternalForm() );
+    return new URL( "pentaho-web-package", null, url.toExternalForm() );
   }
 }

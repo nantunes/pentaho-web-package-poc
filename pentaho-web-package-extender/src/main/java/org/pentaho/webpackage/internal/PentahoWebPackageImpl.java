@@ -1,75 +1,53 @@
-/*!
- * Copyright 2010 - 2017 Pentaho Corporation. All rights reserved.
+/*
+ * This program is free software; you can redistribute it and/or modify it under the
+ * terms of the GNU Lesser General Public License, version 2.1 as published by the Free Software
+ * Foundation.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You should have received a copy of the GNU Lesser General Public License along with this
+ * program; if not, you can obtain a copy at http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+ * or from the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU Lesser General Public License for more details.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ *
+ * Copyright 2002 - 2017 Pentaho Corporation. All rights reserved.
  */
 
 package org.pentaho.webpackage.internal;
 
-import org.ops4j.pax.web.extender.whiteboard.ExtenderConstants;
 import org.ops4j.pax.web.extender.whiteboard.ResourceMapping;
 import org.ops4j.pax.web.extender.whiteboard.runtime.DefaultResourceMapping;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
-import org.osgi.framework.Version;
-import org.osgi.service.http.HttpContext;
+import org.osgi.framework.ServiceRegistration;
 import org.pentaho.webpackage.PentahoWebPackage;
-import org.pentaho.webpackage.PentahoWebPackageService;
 
-import java.io.IOException;
-import java.net.URL;
-import java.util.Dictionary;
-import java.util.Hashtable;
-
-public class PentahoWebPackageImpl implements PentahoWebPackage {
-  private final Bundle bundle;
+public class PentahoWebPackageImpl extends PentahoWebPackageAbstract {
   private final BundleContext bundleContext;
-  private final Version version;
-  private final String root;
-  private String name;
 
-  public PentahoWebPackageImpl( Bundle bundle, String name, Version version, String root ) {
-    this.bundle = bundle;
+  private ServiceRegistration<?> serviceReference;
+
+  PentahoWebPackageImpl( Bundle bundle, String name, String version, String resourceRootPath ) {
+    super( name, version, resourceRootPath );
+
     this.bundleContext = bundle.getBundleContext();
-
-    this.name = name;
-    this.version = version;
-
-    this.root = root;
-  }
-
-  @Override
-  public String getName() {
-    return this.name;
-  }
-
-  @Override
-  public String getVersion() {
-    return null;
-  }
-
-  @Override
-  public String getContextPath() {
-    return null;
   }
 
   @Override
   public void init() {
     // Register resource mapping in httpService whiteboard
     DefaultResourceMapping resourceMapping = new DefaultResourceMapping();
-    resourceMapping.setAlias( "/" + name + "/" + version );
-    resourceMapping.setPath( root );
+    resourceMapping.setAlias( "/" + this.getName() + "/" + this.getVersion() );
+    resourceMapping.setPath( this.getResourceRootPath() );
 
-    this.bundleContext.registerService( ResourceMapping.class.getName(), resourceMapping, null );
+    this.serviceReference = this.bundleContext.registerService( ResourceMapping.class.getName(), resourceMapping, null );
+  }
+
+  @Override
+  public void destroy() {
+    this.serviceReference.unregister();
   }
 }
