@@ -1,7 +1,0 @@
-{
-  "config": {
-    "pentaho/service": {
-      "my-module_is": "another_thing"
-    }
-  }
-}
